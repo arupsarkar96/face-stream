@@ -1,0 +1,6 @@
+opencv-python
+insightface
+numpy
+requests
+pillow
+onnxruntime
