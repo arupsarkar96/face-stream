@@ -72,7 +72,7 @@ def process_camera_stream(rtsp_url, camera_id, server_url, sample_rate):
     logging.info(f"🎥 Starting processing for camera: {camera_id} from {rtsp_url}")
 
     while True:
-        cap = cv2.VideoCapture(rtsp_url)
+        cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
         if not cap.isOpened():
             logging.warning(f"[{camera_id}] 🔄 Camera offline or unreachable. Retrying in 10s...")
             sleep(10)
@@ -138,6 +138,7 @@ def camera_thread(camera_id, rtsp_url, server_url, sample_rate=SAMPLE_RATE):
 
 # === LAUNCH ALL CAMERAS ===
 def start_all_camera_threads():
+    run_web_server()
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s"
@@ -167,6 +168,84 @@ def start_all_camera_threads():
     except KeyboardInterrupt:
         logging.info("🛑 Gracefully shutting down camera threads")
 
+
+# --- START WEBSERVER ---
+def run_web_server():
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    import json
+    from pathlib import Path
+    from urllib.parse import parse_qs
+
+    CONFIG_PATH = Path("config.json")
+
+    class CameraHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == "/":
+                self.send_response(200)
+                self.send_header("Content-type", "text/html")
+                self.end_headers()
+                with open("web/index.html", "rb") as f:
+                    self.wfile.write(f.read())
+            elif self.path == "/cameras":
+                config = json.load(open(CONFIG_PATH))
+                cameras = config.get("cameras", [])
+                self.send_response(200)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps(cameras).encode())
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+        def do_POST(self):
+            content_length = int(self.headers["Content-Length"])
+            post_data = self.rfile.read(content_length)
+            data = parse_qs(post_data.decode())
+
+            if self.path == "/add":
+                cam_id = data.get("id", [""])[0]
+                cam_url = data.get("url", [""])[0]
+
+                config = json.load(open(CONFIG_PATH))
+                cameras = config.get("cameras", [])
+                if any(c["id"] == cam_id for c in cameras):
+                    self.send_response(400)
+                    self.end_headers()
+                    self.wfile.write(b"Camera ID already exists")
+                    return
+
+                cameras.append({"id": cam_id, "url": cam_url})
+                config["cameras"] = cameras
+                with open(CONFIG_PATH, "w") as f:
+                    json.dump(config, f, indent=4)
+
+                self.send_response(303)
+                self.send_header("Location", "/")
+                self.end_headers()
+
+            elif self.path == "/remove":
+                cam_id = data.get("id", [""])[0]
+
+                config = json.load(open(CONFIG_PATH))
+                cameras = config.get("cameras", [])
+                config["cameras"] = [c for c in cameras if c["id"] != cam_id]
+
+                with open(CONFIG_PATH, "w") as f:
+                    json.dump(config, f, indent=4)
+
+                self.send_response(303)
+                self.send_header("Location", "/")
+                self.end_headers()
+
+    def run_web_gui():
+        server_address = ("", 8001)
+        httpd = HTTPServer(server_address, CameraHandler)
+        print("🌐 Web GUI running at http://localhost:8001")
+        httpd.serve_forever()
+
+    # Run the web server in a separate thread
+    web_thread = threading.Thread(target=run_web_gui, daemon=True)
+    web_thread.start()
 
 # === MAIN ENTRY POINT ===
 if __name__ == "__main__":
