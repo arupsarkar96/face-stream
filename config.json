@@ -1,5 +1,5 @@
 {
-    "server_url": "https://api.mesez.me/api/v1/tracking/cctv",
+    "server_url": "https://facestream.messant.in/api/v1/tracking/cctv",
     "sample_rate": 30,
     "cameras": [
         {

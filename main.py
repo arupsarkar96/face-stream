@@ -135,7 +135,6 @@ def camera_thread(camera_id, rtsp_url, server_url, sample_rate=SAMPLE_RATE):
     except Exception as e:
         logging.error(f"❌ Error in thread for {camera_id}: {e}")
 
-
 # === LAUNCH ALL CAMERAS ===
 def start_all_camera_threads():
     run_web_server()
